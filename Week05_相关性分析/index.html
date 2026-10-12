@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e0e18">
+<title>双摆混沌模拟器 · Double Pendulum Chaos Simulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0e0e18;
+    color: #d0d6e0;
+    font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    /* iOS notch safe-area */
+    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+             env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: block;
+    cursor: grab;
+    touch-action: none;
+  }
+  #stage.grabbing { cursor: grabbing; }
+  #stage.pointing { cursor: pointer; }
+
+  .panel {
+    position: fixed;
+    background: rgba(20, 22, 34, 0.62);
+    border: 1px solid rgba(120, 140, 200, 0.14);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #c2c8da;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+  }
+  .panel h1, .panel h3 { font-weight: 600; color: #e8ecf6; }
+  .panel h3 {
+    font-size: 10px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: #6c8cff;
+    margin-bottom: 8px;
+  }
+
+  #title { top: 18px; left: 18px; max-width: 320px; }
+  #title h1 { font-size: 14px; letter-spacing: 0.5px; }
+  #title .sub {
+    font-size: 10px;
+    color: #6c7392;
+    margin-top: 4px;
+    letter-spacing: 2px;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  #title .tag {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #ff5f6d, #ffc371, #f9f871, #5fffa1, #5fc9ff, #a25fff, #ff5fa2);
+    background-size: 200% 100%;
+    color: #1a1a24;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    animation: tagShimmer 6s linear infinite;
+  }
+  @keyframes tagShimmer {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+
+  #telemetry {
+    top: 18px;
+    right: 18px;
+    min-width: 240px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  .row .k { color: #707892; }
+  .row .v {
+    color: #e6ebf5;
+    font-weight: 600;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    font-size: 11px;
+  }
+
+  .group-label {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(120, 140, 200, 0.18);
+    font-size: 9.5px;
+    letter-spacing: 2px;
+    color: #8a92aa;
+    text-transform: uppercase;
+  }
+  .group-label:first-of-type { border-top: none; padding-top: 0; margin-top: 4px; }
+
+  #controls {
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    padding: 12px 20px;
+    max-width: calc(100vw - 36px);
+  }
+
+  .button-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .slider-row {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .slider-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 140px;
+    padding: 2px 12px;
+    border-left: 1px solid rgba(120, 140, 200, 0.12);
+  }
+  .slider-cell:first-child { border-left: none; }
+
+  .slider-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-size: 10.5px;
+    letter-spacing: 1.5px;
+    color: #8a92aa;
+    text-transform: uppercase;
+  }
+  .slider-head .label { color: #aab2cc; font-weight: 600; }
+  .slider-head .value {
+    color: #e6ebf5;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .slider-head .value .unit {
+    color: #707892;
+    font-weight: 400;
+    margin-left: 2px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  button {
+    background: rgba(108, 140, 255, 0.12);
+    color: #bcc8ff;
+    border: 1px solid rgba(108, 140, 255, 0.28);
+    padding: 7px 16px;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 11.5px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  button:hover {
+    background: rgba(108, 140, 255, 0.22);
+    color: #fff;
+    border-color: rgba(108, 140, 255, 0.5);
+  }
+  button:active { transform: scale(0.97); }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: rgba(140, 160, 220, 0.30);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    touch-action: none;       /* avoid page-scroll hijack on mobile */
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: #6c8cff;
+    border-radius: 50%;
+    border: 2px solid #1a1a24;
+    box-shadow: 0 0 8px rgba(108, 140, 255, 0.7);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    background: #6c8cff;
+    border-radius: 50%;
+    border: 2px solid #1a1a24;
+    box-shadow: 0 0 8px rgba(108, 140, 255, 0.7);
+    cursor: pointer;
+  }
+
+  #hint {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    font-size: 10.5px;
+    color: #5a6280;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    letter-spacing: 1px;
+    pointer-events: none;
+  }
+  #hint b { color: #8a92aa; font-weight: 600; }
+
+  /* ===== Preset scene row (天体预设胶囊) ===== */
+  .preset-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    margin-top: 2px;
+    border-top: 1px dashed rgba(120, 140, 200, 0.18);
+  }
+  .preset-row .preset-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #6c7392;
+    text-transform: uppercase;
+    margin-right: 4px;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  .preset-capsule {
+    background: rgba(108, 140, 255, 0.08);
+    color: #bcc8ff;
+    border: 1px solid rgba(108, 140, 255, 0.22);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background 0.18s ease, color 0.18s ease,
+                border-color 0.18s ease, box-shadow 0.18s ease,
+                transform 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .preset-capsule:hover {
+    background: rgba(108, 140, 255, 0.18);
+    color: #fff;
+    border-color: rgba(108, 140, 255, 0.45);
+  }
+  .preset-capsule:active { transform: scale(0.96); }
+  .preset-capsule.active {
+    background: rgba(108, 140, 255, 0.32);
+    color: #fff;
+    border-color: rgba(140, 170, 255, 0.7);
+    box-shadow: 0 0 12px rgba(108, 140, 255, 0.45);
+  }
+  .preset-capsule .icon  { font-size: 13px; line-height: 1; }
+  .preset-capsule .g-hint {
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    font-size: 10px;
+    color: rgba(190, 200, 230, 0.75);
+    font-variant-numeric: tabular-nums;
+  }
+  .preset-capsule.active .g-hint { color: #fff; }
+
+  /* ====== Responsive: tablet & mobile ====== */
+  @media (max-width: 920px) {
+    #controls {
+      left: 12px; right: 12px;
+      transform: none;
+      bottom: 12px;
+      padding: 10px 14px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .slider-cell {
+      border-left: none;
+      border-top: 1px dashed rgba(120, 140, 200, 0.10);
+      padding: 6px 4px 2px;
+      min-width: 0;
+    }
+    .slider-cell:first-child { border-top: none; padding-top: 2px; }
+  }
+  @media (max-width: 560px) {
+    #title {
+      top: 10px; left: 10px;
+      padding: 8px 12px;
+      max-width: calc(100vw - 20px);
+    }
+    #title h1 { font-size: 12px; }
+    #title .sub { font-size: 9px; letter-spacing: 1.5px; }
+    #title .tag { display: none; }
+    #telemetry {
+      top: 10px; right: 10px;
+      min-width: 0;
+      padding: 8px 10px;
+      font-size: 10.5px;
+    }
+    #telemetry .row .v { font-size: 10px; }
+    #hint { display: none; }
+    .button-row button { padding: 7px 10px; font-size: 10.5px; }
+    .preset-capsule { padding: 6px 10px; font-size: 10.5px; }
+    .preset-row .preset-label { display: none; }
+  }
+  @media (max-height: 480px) and (orientation: landscape) {
+    #title, #telemetry { font-size: 10px; padding: 6px 10px; }
+    #title h1 { font-size: 11px; }
+    #title .sub, #title .tag { display: none; }
+    #telemetry { min-width: 0; }
+    #controls { bottom: 8px; padding: 6px 10px; gap: 6px; }
+    #hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<section id="title" class="panel">
+  <h1>DOUBLE PENDULUM · 双摆混沌模拟器</h1>
+  <div class="sub">LAGRANGIAN · RK4 INTEGRATION · CHAOTIC DYNAMICS</div>
+  <span class="tag">CLASSIC CHAOS</span>
+</section>
+
+<section id="telemetry" class="panel">
+  <h3>LIVE TELEMETRY · 实时遥测</h3>
+
+  <div class="group-label">BOB 1 · 第一摆</div>
+  <div class="row"><span class="k">Angle θ₁</span><span class="v" id="v-th1">+0.00°</span></div>
+  <div class="row"><span class="k">Angular ω₁</span><span class="v" id="v-om1">0.00 rad/s</span></div>
+
+  <div class="group-label">BOB 2 · 第二摆</div>
+  <div class="row"><span class="k">Angle θ₂</span><span class="v" id="v-th2">+0.00°</span></div>
+  <div class="row"><span class="k">Angular ω₂</span><span class="v" id="v-om2">0.00 rad/s</span></div>
+
+  <div class="group-label">SYSTEM · 系统</div>
+  <div class="row"><span class="k">Energy E</span><span class="v" id="v-energy">0.000 J</span></div>
+  <div class="row"><span class="k">FPS</span><span class="v" id="v-fps">0</span></div>
+</section>
+
+<section id="controls" class="panel">
+  <div class="button-row">
+    <button id="btn-pause">⏸  PAUSE</button>
+    <button id="btn-reset-swing">⟲  RESET SWING</button>
+    <button id="btn-reset-all">⟲⟲  RESET ALL</button>
+    <button id="btn-energize">⚡  KICK</button>
+  </div>
+  <div class="slider-row">
+    <div class="slider-cell">
+      <div class="slider-head">
+        <span class="label">摆长 L₁</span>
+        <span class="value"><span id="val-len1">180</span><span class="unit"> px</span></span>
+      </div>
+      <input type="range" id="slider-len1" min="80" max="320" value="180" step="1">
+    </div>
+    <div class="slider-cell">
+      <div class="slider-head">
+        <span class="label">摆长 L₂</span>
+        <span class="value"><span id="val-len2">150</span><span class="unit"> px</span></span>
+      </div>
+      <input type="range" id="slider-len2" min="60" max="280" value="150" step="1">
+    </div>
+    <div class="slider-cell">
+      <div class="slider-head">
+        <span class="label">质量 m₁</span>
+        <span class="value"><span id="val-m1">1.00</span><span class="unit"> kg</span></span>
+      </div>
+      <input type="range" id="slider-m1" min="0.3" max="3.0" value="1.0" step="0.05">
+    </div>
+    <div class="slider-cell">
+      <div class="slider-head">
+        <span class="label">质量 m₂</span>
+        <span class="value"><span id="val-m2">1.00</span><span class="unit"> kg</span></span>
+      </div>
+      <input type="range" id="slider-m2" min="0.3" max="3.0" value="1.0" step="0.05">
+    </div>
+    <div class="slider-cell">
+      <div class="slider-head">
+        <span class="label">重力 g</span>
+        <span class="value"><span id="val-g">9.80</span><span class="unit"> m/s²</span></span>
+      </div>
+      <input type="range" id="slider-g" min="0" max="25" value="9.8" step="0.1">
+    </div>
+    <div class="slider-cell">
+      <div class="slider-head">
+        <span class="label">阻尼 ζ</span>
+        <span class="value"><span id="val-damping">0.0000</span><span class="unit"> s⁻¹</span></span>
+      </div>
+      <input type="range" id="slider-damping" min="0" max="0.008" value="0" step="0.0002">
+    </div>
+  </div>
+  <div class="preset-row" id="preset-row">
+    <span class="preset-label">SCENE · 天体</span>
+    <button type="button" class="preset-capsule" data-preset="earth"  aria-label="地球">
+      <span class="icon">🌍</span><span>地球</span><span class="g-hint">9.80</span>
+    </button>
+    <button type="button" class="preset-capsule" data-preset="moon"   aria-label="月球">
+      <span class="icon">🌙</span><span>月球</span><span class="g-hint">1.62</span>
+    </button>
+    <button type="button" class="preset-capsule" data-preset="jupiter" aria-label="木星">
+      <span class="icon">🪐</span><span>木星</span><span class="g-hint">24.79</span>
+    </button>
+    <button type="button" class="preset-capsule" data-preset="space"  aria-label="太空">
+      <span class="icon">🚀</span><span>太空</span><span class="g-hint">0.00</span>
+    </button>
+  </div>
+</section>
+
+<div id="hint"><b>DRAG · 拖动</b> 任一摆球改变初始角度</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ============================================================
+  //  Storage + defaults + preset scenes
+  // ============================================================
+  const STORAGE_KEY = 'pendulum-config-v1';
+
+  const DEFAULTS = Object.freeze({
+    L1:      180,
+    L2:      150,
+    m1:      1.0,
+    m2:      1.0,
+    g:       9.8,
+    damping: 0,
+  });
+
+  // Surface gravity of celestial bodies (m/s²) — used as quick scene presets
+  const PRESETS = Object.freeze({
+    earth:   { g: 9.80,  tolerance: 0.05 },
+    moon:    { g: 1.62,  tolerance: 0.05 },
+    jupiter: { g: 24.79, tolerance: 0.10 },
+    space:   { g: 0.00,  tolerance: 0.01 },
+  });
+
+  function isValidConfig(cfg) {
+    return cfg
+      && Number.isFinite(cfg.L1)      && cfg.L1      >= 0  && cfg.L1      <= 10000
+      && Number.isFinite(cfg.L2)      && cfg.L2      >= 0  && cfg.L2      <= 10000
+      && Number.isFinite(cfg.m1)      && cfg.m1      >= 0  && cfg.m1      <= 1000
+      && Number.isFinite(cfg.m2)      && cfg.m2      >= 0  && cfg.m2      <= 1000
+      && Number.isFinite(cfg.g)       && cfg.g       >= 0  && cfg.g       <= 1000
+      && Number.isFinite(cfg.damping) && cfg.damping >= 0  && cfg.damping <= 100;
+  }
+
+  function loadConfig() {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return isValidConfig(parsed) ? parsed : null;
+    } catch (_) {
+      // private mode / quota / malformed JSON — silently fall back
+      return null;
+    }
+  }
+
+  function saveConfig() {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        L1: state.L1, L2: state.L2,
+        m1: state.m1, m2: state.m2,
+        g:  state.g,
+        damping: state.damping,
+      }));
+    } catch (_) {
+      // localStorage unavailable — silently ignore
+    }
+  }
+
+  // ============================================================
+  //  Canvas
+  // ============================================================
+  const canvas = document.getElementById('stage');
+  const ctx    = canvas.getContext('2d');
+
+  // ============================================================
+  //  Simulation state
+  //   θ₁, θ₂  — angle from vertical (rad)
+  //   ω₁, ω₂  — angular velocity (rad/s)
+  //   L₁, L₂  — rod lengths (px)
+  //   m₁, m₂  — bob masses (kg, relative)
+  //   g       — gravity (m/s²)
+  //   damping — linear viscous damping on both joints (1/s)
+  // ============================================================
+  const state = {
+    pivot:    { x: 0, y: 0 },          // anchor (px)
+    th1:       120 * Math.PI / 180,    // θ₁ (rad)
+    om1:       0,                      // ω₁ (rad/s)
+    th2:      -150 * Math.PI / 180,    // θ₂ (rad)  → strongly non-aligned → chaotic
+    om2:       0,                      // ω₂ (rad/s)
+    L1:        180,                    // first rod (px)
+    L2:        150,                    // second rod (px)
+    m1:        1.0,                    // bob 1 mass
+    m2:        1.0,                    // bob 2 mass
+    g:         9.8,                    // gravity (m/s²)
+    damping:   0,                      // damping coefficient
+    pxPerMeter: 100,                   // 100 px = 1 m
+    running:    true,
+    dragging:   false,
+    dragTarget: 0,                     // 1 = bob1, 2 = bob2
+    trail:      [],                    // bob2 trail for shimmer
+    maxTrail:   320,
+    hueOffset:  0,                     // animates rainbow
+    fps:        60,
+    fpsCount:   0,
+    fpsLast:    performance.now(),
+    lastFrame:  performance.now(),
+    acc:        0,                     // physics accumulator
+    fixedDt:    1 / 360,               // physics sub-step (s) — small for stability
+    hoverTarget: 0,                    // which bob is under the cursor (visual only)
+    activePreset: null,                // currently highlighted scene (earth/moon/jupiter/space)
+    gTransition: null,                 // { cancel: true } flag for in-flight gravity tween
+  };
+
+  // ============================================================
+  //  Canvas resize / DPI
+  // ============================================================
+  let DPR = 1, W = 0, H = 0, bgGradient = null;
+
+  function resize() {
+    DPR = window.devicePixelRatio || 1;
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width  = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+
+    state.pivot.x = W / 2;
+    state.pivot.y = Math.max(160, H * 0.20);
+
+    bgGradient = ctx.createRadialGradient(
+      W / 2, H * 0.55, 0,
+      W / 2, H * 0.55, Math.max(W, H) * 0.8
+    );
+    bgGradient.addColorStop(0,   '#1d1f2c');
+    bgGradient.addColorStop(0.5, '#13141d');
+    bgGradient.addColorStop(1,   '#08090f');
+  }
+  window.addEventListener('resize', resize);
+
+  // ============================================================
+  //  Lagrangian equations of motion for a planar double pendulum
+  //  (rigid, frictionless joints; user-added linear damping).
+  //
+  //  Defining  δ = θ₁ − θ₂ ,  D = 2·m₁ + m₂ − m₂·cos(2δ),
+  //
+  //    θ₁'' = [ −g·(2m₁+m₂)·sinθ₁ − m₂·g·sin(θ₁−2θ₂)
+  //             − 2·sinδ·m₂·(ω₂²·L₂ + ω₁²·L₁·cosδ) ] / (L₁·D)  − ζ·ω₁
+  //
+  //    θ₂'' = [ 2·sinδ·( ω₁²·L₁·(m₁+m₂) + g·(m₁+m₂)·cosθ₁
+  //                          + ω₂²·L₂·m₂·cosδ ) ] / (L₂·D)  − ζ·ω₂
+  // ============================================================
+  function derivatives(s) {
+    const th1 = s.th1, om1 = s.om1, th2 = s.th2, om2 = s.om2;
+    const { g } = state;
+    const L1 = s.L1 / state.pxPerMeter;     // physical meters
+    const L2 = s.L2 / state.pxPerMeter;
+    const m1 = state.m1, m2 = state.m2;
+    const damp = state.damping;
+
+    const delta  = th1 - th2;
+    const sinD   = Math.sin(delta);
+    const cosD   = Math.cos(delta);
+    const sinT1  = Math.sin(th1);
+    const sinT1m2 = Math.sin(th1 - 2 * th2);
+    const den    = 2 * m1 + m2 - m2 * Math.cos(2 * delta);   // ∈ [2m₁, 2(m₁+m₂)] > 0
+
+    const dth1 = om1;
+    const dth2 = om2;
+
+    const num1 =
+        -g * (2 * m1 + m2) * sinT1
+      - m2 * g * sinT1m2
+      - 2 * sinD * m2 * (om2 * om2 * L2 + om1 * om1 * L1 * cosD);
+
+    const num2 =
+        2 * sinD * (
+          om1 * om1 * L1 * (m1 + m2)
+        + g       * (m1 + m2) * Math.cos(th1)
+        + om2 * om2 * L2 * m2 * cosD
+        );
+
+    const dom1 = num1 / (L1 * den) - damp * om1;
+    const dom2 = num2 / (L2 * den) - damp * om2;
+
+    return { dth1, dom1, dth2, dom2 };
+  }
+
+  // Classic 4th-order Runge-Kutta on the 4-D state vector.
+  function rk4Step(s, dt) {
+    const k1 = derivatives(s);
+
+    const s2 = {
+      th1: s.th1 + k1.dth1 * dt / 2,
+      om1: s.om1 + k1.dom1 * dt / 2,
+      th2: s.th2 + k1.dth2 * dt / 2,
+      om2: s.om2 + k1.dom2 * dt / 2,
+      L1:  s.L1, L2: s.L2,
+    };
+    const k2 = derivatives(s2);
+
+    const s3 = {
+      th1: s.th1 + k2.dth1 * dt / 2,
+      om1: s.om1 + k2.dom1 * dt / 2,
+      th2: s.th2 + k2.dth2 * dt / 2,
+      om2: s.om2 + k2.dom2 * dt / 2,
+      L1:  s.L1, L2: s.L2,
+    };
+    const k3 = derivatives(s3);
+
+    const s4 = {
+      th1: s.th1 + k3.dth1 * dt,
+      om1: s.om1 + k3.dom1 * dt,
+      th2: s.th2 + k3.dth2 * dt,
+      om2: s.om2 + k3.dom2 * dt,
+      L1:  s.L1, L2: s.L2,
+    };
+    const k4 = derivatives(s4);
+
+    return {
+      th1: s.th1 + (dt / 6) * (k1.dth1 + 2 * k2.dth1 + 2 * k3.dth1 + k4.dth1),
+      om1: s.om1 + (dt / 6) * (k1.dom1 + 2 * k2.dom1 + 2 * k3.dom1 + k4.dom1),
+      th2: s.th2 + (dt / 6) * (k1.dth2 + 2 * k2.dth2 + 2 * k3.dth2 + k4.dth2),
+      om2: s.om2 + (dt / 6) * (k1.dom2 + 2 * k2.dom2 + 2 * k3.dom2 + k4.dom2),
+    };
+  }
+
+  // Geometry: positions of bob 1 and bob 2 in screen pixels.
+  function bob1Pos() {
+    const { pivot, th1, L1 } = state;
+    return { x: pivot.x + L1 * Math.sin(th1), y: pivot.y + L1 * Math.cos(th1) };
+  }
+  function bob2Pos(b1) {
+    const p = b1 || bob1Pos();
+    return { x: p.x + state.L2 * Math.sin(state.th2), y: p.y + state.L2 * Math.cos(state.th2) };
+  }
+
+  // ============================================================
+  //  Drawing
+  // ============================================================
+  function drawGrid() {
+    const spacing = 60;
+    ctx.strokeStyle = 'rgba(100, 120, 170, 0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const ox = ((W % spacing) / 2) | 0;
+    const oy = ((H % spacing) / 2) | 0;
+    for (let x = ox; x < W; x += spacing) {
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, H);
+    }
+    for (let y = oy; y < H; y += spacing) {
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(W, y + 0.5);
+    }
+    ctx.stroke();
+  }
+
+  function drawEquilibriumHints() {
+    const { pivot, L1, L2 } = state;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(140, 160, 220, 0.16)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 6]);
+    ctx.beginPath();
+    ctx.moveTo(pivot.x, pivot.y);
+    ctx.lineTo(pivot.x, pivot.y + L1 + L2 + 30);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // ---- Rainbow gradient trail for bob 2 (the chaotic one) ----
+  function drawTrail() {
+    const t = state.trail;
+    if (t.length < 2) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const total = t.length;
+    // Two passes: soft outer glow + crisp inner core.
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 1; i < t.length; i++) {
+        const p1 = t[i - 1];
+        const p2 = t[i];
+        const a  = i / total;                                 // 0 → 1 along trail (head = bright)
+        const hue = (((i / total) * 300) + state.hueOffset) % 360;
+        if (pass === 0) {
+          // Soft outer glow
+          ctx.strokeStyle = 'hsla(' + hue + ', 100%, 62%, ' + (a * 0.16) + ')';
+          ctx.lineWidth   = 11 + a * 6;
+        } else {
+          // Crisp inner core, high luminance
+          ctx.strokeStyle = 'hsla(' + hue + ', 100%, 72%, ' + (a * 0.85) + ')';
+          ctx.lineWidth   = 1.6 + a * 2.6;
+        }
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawCeilingMount() {
+    const { x, y } = state.pivot;
+    ctx.save();
+
+    const beamW = 260, beamH = 6;
+    ctx.fillStyle = 'rgba(180, 190, 220, 0.30)';
+    ctx.fillRect(x - beamW / 2, y - 64, beamW, beamH);
+
+    ctx.fillStyle = 'rgba(180, 190, 220, 0.55)';
+    ctx.fillRect(x - beamW / 2,     y - 58, 6, 32);
+    ctx.fillRect(x + beamW / 2 - 6, y - 58, 6, 32);
+
+    const plateW = 36;
+    const plateG = ctx.createLinearGradient(x - plateW / 2, y - 50, x + plateW / 2, y - 38);
+    plateG.addColorStop(0,   '#4a5878');
+    plateG.addColorStop(0.5, '#7a8eb0');
+    plateG.addColorStop(1,   '#4a5878');
+    ctx.fillStyle = plateG;
+    ctx.fillRect(x - plateW / 2, y - 50, plateW, 12);
+
+    const pinGlow = ctx.createRadialGradient(x, y, 0, x, y, 16);
+    pinGlow.addColorStop(0, 'rgba(140, 180, 255, 0.6)');
+    pinGlow.addColorStop(1, 'rgba(140, 180, 255, 0)');
+    ctx.fillStyle = pinGlow;
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#e0e6f6';
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawRod(pFrom, pTo, isSegmentTwo) {
+    ctx.save();
+    ctx.lineCap = 'round';
+
+    // Outer glow
+    ctx.strokeStyle = isSegmentTwo
+      ? 'rgba(170, 110, 255, 0.18)'
+      : 'rgba(108, 180, 255, 0.18)';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(pFrom.x, pFrom.y);
+    ctx.lineTo(pTo.x,   pTo.y);
+    ctx.stroke();
+
+    // Inner core
+    ctx.strokeStyle = isSegmentTwo
+      ? 'rgba(230, 210, 255, 0.92)'
+      : 'rgba(220, 230, 250, 0.90)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(pFrom.x, pFrom.y);
+    ctx.lineTo(pTo.x,   pTo.y);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawBob(x, y, r, isBobTwo, hover) {
+    ctx.save();
+
+    // Diffuse halo
+    const g1 = ctx.createRadialGradient(x, y, 0, x, y, r * 6);
+    if (isBobTwo) {
+      g1.addColorStop(0,   'rgba(255, 130, 220, 0.30)');
+      g1.addColorStop(0.3, 'rgba(180, 110, 255, 0.10)');
+      g1.addColorStop(1,   'rgba(180, 110, 255, 0)');
+    } else {
+      g1.addColorStop(0,   'rgba(108, 180, 255, 0.28)');
+      g1.addColorStop(0.3, 'rgba(108, 180, 255, 0.08)');
+      g1.addColorStop(1,   'rgba(108, 180, 255, 0)');
+    }
+    ctx.fillStyle = g1;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner halo
+    const g2 = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
+    if (isBobTwo) {
+      g2.addColorStop(0,   'rgba(255, 180, 240, 0.55)');
+      g2.addColorStop(0.5, 'rgba(200, 140, 255, 0.20)');
+      g2.addColorStop(1,   'rgba(180, 110, 255, 0)');
+    } else {
+      g2.addColorStop(0,   'rgba(140, 200, 255, 0.5)');
+      g2.addColorStop(0.5, 'rgba(108, 180, 255, 0.18)');
+      g2.addColorStop(1,   'rgba(108, 180, 255, 0)');
+    }
+    ctx.fillStyle = g2;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    const body = ctx.createRadialGradient(x - r * 0.4, y - r * 0.5, 1, x, y, r);
+    if (isBobTwo) {
+      body.addColorStop(0,    '#ffe8fb');
+      body.addColorStop(0.18, '#f3b2dc');
+      body.addColorStop(0.55, '#6b4488');
+      body.addColorStop(1,    '#1c0a26');
+    } else {
+      body.addColorStop(0,    '#f4f7ff');
+      body.addColorStop(0.18, '#a4b4d8');
+      body.addColorStop(0.55, '#3a4868');
+      body.addColorStop(1,    '#0c0e16');
+    }
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rim
+    ctx.strokeStyle = isBobTwo
+      ? 'rgba(255, 200, 250, 0.55)'
+      : 'rgba(180, 210, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r - 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Specular
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.beginPath();
+    ctx.arc(x - r * 0.35, y - r * 0.4, r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hover / drag affordance ring
+    if (hover) {
+      ctx.strokeStyle = isBobTwo
+        ? 'rgba(255, 180, 240, 0.95)'
+        : 'rgba(140, 200, 255, 0.95)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  //  HUD
+  // ============================================================
+  const vTh1   = document.getElementById('v-th1');
+  const vOm1   = document.getElementById('v-om1');
+  const vTh2   = document.getElementById('v-th2');
+  const vOm2   = document.getElementById('v-om2');
+  const vE     = document.getElementById('v-energy');
+  const vFps   = document.getElementById('v-fps');
+
+  function fmtSigned(rad) {
+    const deg = rad * 180 / Math.PI;
+    return (deg >= 0 ? '+' : '') + deg.toFixed(2) + '°';
+  }
+
+  function totalEnergy() {
+    const { th1, om1, th2, om2, m1, m2, g } = state;
+    const L1 = state.L1 / state.pxPerMeter;
+    const L2 = state.L2 / state.pxPerMeter;
+
+    // Velocities (m/s)
+    const v1sq = (L1 * om1) * (L1 * om1);
+    const v2sq = (L1 * om1) * (L1 * om1)
+               + (L2 * om2) * (L2 * om2)
+               + 2 * L1 * L2 * om1 * om2 * Math.cos(th1 - th2);
+
+    const KE = 0.5 * m1 * v1sq + 0.5 * m2 * v2sq;
+    const h1 = L1 * (1 - Math.cos(th1));
+    const h2 = h1 + L2 * (1 - Math.cos(th2));
+    const PE = m1 * g * h1 + m2 * g * h2;
+    return KE + PE;
+  }
+
+  function updateHUD() {
+    vTh1.textContent = fmtSigned(state.th1);
+    vOm1.textContent = state.om1.toFixed(2);
+    vTh2.textContent = fmtSigned(state.th2);
+    vOm2.textContent = state.om2.toFixed(2);
+    vE.textContent   = totalEnergy().toFixed(3) + ' J';
+    vFps.textContent = state.fps.toFixed(0);
+  }
+
+  // ============================================================
+  //  Frame
+  // ============================================================
+  function isFiniteNum(x) {
+    return typeof x === 'number' && Number.isFinite(x);
+  }
+
+  function tick(now) {
+    requestAnimationFrame(tick);
+
+    const dtFrame = Math.min(0.05, (now - state.lastFrame) / 1000);
+    state.lastFrame = now;
+
+    // FPS rolling average (every 500 ms)
+    state.fpsCount++;
+    if (now - state.fpsLast >= 500) {
+      state.fps = (state.fpsCount * 1000) / (now - state.fpsLast);
+      state.fpsCount = 0;
+      state.fpsLast = now;
+    }
+
+    // ---- Physics: fixed-step RK4 sub-stepping ----
+    if (state.running && !state.dragging) {
+      state.acc += dtFrame;
+      if (state.acc > 0.25) state.acc = 0.25;       // anti spiral-of-death
+      let steps = 0;
+      while (state.acc >= state.fixedDt && steps < 800) {
+        const next = rk4Step(state, state.fixedDt);
+        if (isFiniteNum(next.th1) && isFiniteNum(next.th2)
+            && isFiniteNum(next.om1) && isFiniteNum(next.om2)
+            && Math.abs(next.om1) < 1000 && Math.abs(next.om2) < 1000) {
+          state.th1 = next.th1; state.om1 = next.om1;
+          state.th2 = next.th2; state.om2 = next.om2;
+        } else {
+          // numerical blow-up guard: clamp to last good state, zero velocities
+          state.om1 = 0; state.om2 = 0;
+        }
+        state.acc -= state.fixedDt;
+        steps++;
+      }
+      if (steps >= 800) state.acc = 0;              // drop the backlog, stay stable
+    } else {
+      state.acc = 0;
+    }
+
+    // ---- Trail (only on bob 2) — skip when dragging so it doesn't smear ----
+    if (!state.dragging) {
+      const b2 = bob2Pos();
+      const last = state.trail[state.trail.length - 1];
+      if (!last || Math.hypot(b2.x - last.x, b2.y - last.y) > 1.6) {
+        state.trail.push({ x: b2.x, y: b2.y });
+        if (state.trail.length > state.maxTrail) state.trail.shift();
+      }
+      // Animate the rainbow phase (deg / sec)
+      state.hueOffset = (state.hueOffset + dtFrame * 130) % 360;
+    }
+
+    // ---- Cursor feedback ----
+    if (state.dragging) {
+      canvas.classList.add('grabbing');
+      canvas.classList.remove('pointing');
+    } else if (state.hoverTarget) {
+      canvas.classList.add('pointing');
+      canvas.classList.remove('grabbing');
+    } else {
+      canvas.classList.remove('grabbing');
+      canvas.classList.remove('pointing');
+    }
+
+    // ---- Render ----
+    ctx.save();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    if (bgGradient) {
+      ctx.fillStyle = bgGradient;
+      ctx.fillRect(0, 0, W, H);
+    }
+    drawGrid();
+    drawEquilibriumHints();
+    drawTrail();
+
+    const p0 = state.pivot;
+    const b1 = bob1Pos();
+    const b2 = bob2Pos(b1);
+
+    drawRod(p0, b1, false);
+    drawBob(b1.x, b1.y, 16, false, state.hoverTarget === 1);
+    drawRod(b1, b2, true);
+    drawBob(b2.x, b2.y, 18, true,  state.hoverTarget === 2);
+
+    drawCeilingMount();
+
+    ctx.restore();
+
+    updateHUD();
+  }
+
+  // ============================================================
+  //  Pointer interaction: pick the closest grabbable bob; drag it.
+  // ============================================================
+  function clampAngle(t) {
+    // keep θ away from the singular "straight up" pose so a careless drag
+    // doesn't launch the integrator over the top in one giant step.
+    const limit = Math.PI * 0.96;
+    if (t >  limit) return  limit;
+    if (t < -limit) return -limit;
+    return t;
+  }
+
+  function pickBob(cx, cy) {
+    const b1 = bob1Pos();
+    const b2 = bob2Pos(b1);
+    const d1 = Math.hypot(cx - b1.x, cy - b1.y);
+    const d2 = Math.hypot(cx - b2.x, cy - b2.y);
+    const R  = 28;                                  // generous hit-radius
+    if (d1 <= R && d1 <= d2) return 1;
+    if (d2 <= R)            return 2;
+    return 0;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const which = pickBob(e.clientX, e.clientY);
+    if (!which) return;
+    state.dragging   = true;
+    state.dragTarget = which;
+    state.om1 = 0;
+    state.om2 = 0;
+    if (which === 1) {
+      state.th1 = clampAngle(Math.atan2(
+        e.clientX - state.pivot.x,
+        e.clientY - state.pivot.y
+      ));
+    } else {
+      const b1 = bob1Pos();
+      state.th2 = clampAngle(Math.atan2(
+        e.clientX - b1.x,
+        e.clientY - b1.y
+      ));
+    }
+    state.trail.length = 0;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (state.dragging) {
+      if (state.dragTarget === 1) {
+        state.th1 = clampAngle(Math.atan2(
+          e.clientX - state.pivot.x,
+          e.clientY - state.pivot.y
+        ));
+      } else {
+        const b1 = bob1Pos();
+        state.th2 = clampAngle(Math.atan2(
+          e.clientX - b1.x,
+          e.clientY - b1.y
+        ));
+      }
+      state.om1 = 0;
+      state.om2 = 0;
+    } else {
+      state.hoverTarget = pickBob(e.clientX, e.clientY);
+    }
+  });
+
+  function endDrag(e) {
+    if (!state.dragging) return;
+    state.dragging   = false;
+    state.dragTarget = 0;
+    // Released from rest — clean energy baseline for the new motion.
+    state.om1 = 0;
+    state.om2 = 0;
+    state.trail.length = 0;
+    if (e && e.pointerId !== undefined) {
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+    }
+  }
+  canvas.addEventListener('pointerup',     endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerleave',  () => { state.hoverTarget = 0; });
+
+  // ============================================================
+  //  UI controls
+  // ============================================================
+  const btnPause = document.getElementById('btn-pause');
+  btnPause.addEventListener('click', () => {
+    state.running = !state.running;
+    btnPause.textContent = state.running ? '⏸  PAUSE' : '▶  RESUME';
+  });
+
+  // RESET SWING — return to a strongly non-equilibrium pose, parameters unchanged
+  document.getElementById('btn-reset-swing').addEventListener('click', () => {
+    state.th1 = 120 * Math.PI / 180;
+    state.th2 = -150 * Math.PI / 180;
+    state.om1 = 0;
+    state.om2 = 0;
+    state.trail.length = 0;
+    state.running = true;
+    btnPause.textContent = '⏸  PAUSE';
+  });
+
+  // RESET ALL — restore defaults on every slider, return to initial pose
+  function fmt(name, v) {
+    if (name === 'g')             return (+v).toFixed(2);
+    if (name === 'damping')       return (+v).toFixed(4);
+    if (name === 'm1' || name === 'm2') return (+v).toFixed(2);
+    return String(Math.round(+v));
+  }
+  function syncSlider(name, val) {
+    const s = document.getElementById('slider-' + name);
+    const d = document.getElementById('val-' + name);
+    if (s) s.value = val;
+    if (d) d.textContent = fmt(name, val);
+  }
+  document.getElementById('btn-reset-all').addEventListener('click', () => {
+    if (state.gTransition) state.gTransition.cancel = true;
+    state.gTransition = null;
+    state.L1 = 180;  syncSlider('len1',  180);
+    state.L2 = 150;  syncSlider('len2',  150);
+    state.m1 = 1.0;  syncSlider('m1',    1.0);
+    state.m2 = 1.0;  syncSlider('m2',    1.0);
+    state.g  = 9.8;  syncSlider('g',     9.8);
+    state.damping = 0; syncSlider('damping', 0);
+
+    state.th1 = 120 * Math.PI / 180;
+    state.th2 = -150 * Math.PI / 180;
+    state.om1 = 0;
+    state.om2 = 0;
+    state.trail.length = 0;
+    state.running = true;
+    btnPause.textContent = '⏸  PAUSE';
+
+    state.activePreset = 'earth';
+    syncPresetButtons();
+    saveConfig();
+  });
+
+  // KICK — give the system a quick angular impulse to push it off equilibrium
+  document.getElementById('btn-energize').addEventListener('click', () => {
+    state.om1 += (Math.random() - 0.5) * 6;
+    state.om2 += (Math.random() - 0.5) * 6;
+  });
+
+  // ---- Sliders (live binding) ----
+  const sliderLen1 = document.getElementById('slider-len1');
+  const sliderLen2 = document.getElementById('slider-len2');
+  const sliderM1   = document.getElementById('slider-m1');
+  const sliderM2   = document.getElementById('slider-m2');
+  const sliderG    = document.getElementById('slider-g');
+  const sliderDamp = document.getElementById('slider-damping');
+
+  sliderLen1.addEventListener('input', (e) => {
+    state.L1 = parseFloat(e.target.value);
+    document.getElementById('val-len1').textContent = String(Math.round(state.L1));
+    saveConfig();
+  });
+  sliderLen2.addEventListener('input', (e) => {
+    state.L2 = parseFloat(e.target.value);
+    document.getElementById('val-len2').textContent = String(Math.round(state.L2));
+    saveConfig();
+  });
+  sliderM1.addEventListener('input', (e) => {
+    state.m1 = parseFloat(e.target.value);
+    document.getElementById('val-m1').textContent = state.m1.toFixed(2);
+    saveConfig();
+  });
+  sliderM2.addEventListener('input', (e) => {
+    state.m2 = parseFloat(e.target.value);
+    document.getElementById('val-m2').textContent = state.m2.toFixed(2);
+    saveConfig();
+  });
+  sliderG.addEventListener('input', (e) => {
+    // User took manual control — cancel any preset transition
+    if (state.gTransition) state.gTransition.cancel = true;
+    state.gTransition = null;
+    state.g = parseFloat(e.target.value);
+    document.getElementById('val-g').textContent = state.g.toFixed(2);
+    // Re-evaluate which preset (if any) matches the new g value
+    let matched = null;
+    for (const key in PRESETS) {
+      if (Math.abs(state.g - PRESETS[key].g) <= PRESETS[key].tolerance) { matched = key; break; }
+    }
+    state.activePreset = matched;
+    syncPresetButtons();
+    saveConfig();
+  });
+  sliderDamp.addEventListener('input', (e) => {
+    state.damping = parseFloat(e.target.value);
+    document.getElementById('val-damping').textContent = state.damping.toFixed(4);
+    saveConfig();
+  });
+
+  // ----- Preset scene buttons (天体胶囊) -----
+  const presetRow = document.getElementById('preset-row');
+  const presetButtons = presetRow ? Array.from(presetRow.querySelectorAll('.preset-capsule')) : [];
+
+  function syncPresetButtons() {
+    presetButtons.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.preset === state.activePreset);
+    });
+  }
+
+  // Smooth gravity transition with easeInOutQuad; cancels on user interaction.
+  function animateGTo(targetG, duration) {
+    if (state.gTransition) state.gTransition.cancel = true;
+    const handle = { cancel: false };
+    state.gTransition = handle;
+    const startG = state.g;
+    const t0 = performance.now();
+    const gMin = parseFloat(sliderG.min);
+    const gMax = parseFloat(sliderG.max);
+    function step(now) {
+      if (handle.cancel) return;
+      const t = Math.min(1, (now - t0) / duration);
+      // easeInOutQuad
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const g = startG + (targetG - startG) * eased;
+      state.g = g;
+      const clamped = Math.max(gMin, Math.min(gMax, g));
+      sliderG.value = String(clamped);
+      document.getElementById('val-g').textContent = g.toFixed(2);
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        state.gTransition = null;
+        saveConfig();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  if (presetRow) {
+    presetRow.addEventListener('click', (e) => {
+      const btn = e.target.closest('.preset-capsule');
+      if (!btn) return;
+      const key = btn.dataset.preset;
+      const preset = PRESETS[key];
+      if (!preset) return;
+      state.activePreset = key;
+      syncPresetButtons();
+      animateGTo(preset.g, 700);
+    });
+  }
+
+  // ============================================================
+  //  Boot
+  // ============================================================
+  resize();
+
+  // Restore previously-saved config (if any) before the first frame.
+  const saved = loadConfig();
+  if (saved) {
+    state.L1 = saved.L1;
+    state.L2 = saved.L2;
+    state.m1 = saved.m1;
+    state.m2 = saved.m2;
+    state.g  = saved.g;
+    state.damping = saved.damping;
+  }
+  syncSlider('len1',  state.L1);
+  syncSlider('len2',  state.L2);
+  syncSlider('m1',    state.m1);
+  syncSlider('m2',    state.m2);
+  syncSlider('g',     state.g);
+  syncSlider('damping', state.damping);
+
+  // Decide which preset (if any) the loaded g matches
+  let initialPreset = null;
+  for (const key in PRESETS) {
+    if (Math.abs(state.g - PRESETS[key].g) <= PRESETS[key].tolerance) { initialPreset = key; break; }
+  }
+  state.activePreset = initialPreset;
+  syncPresetButtons();
+
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

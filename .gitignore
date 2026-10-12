@@ -130,3 +130,7 @@ temp/
 *.fls
 *.out
 *.synctex.gz
+
+# --------------- 本项目专用忽略 ---------------
+# Week05 中的 PowerShell 辅助脚本（语法检查工具）
+Week05_相关性分析/_syntax_check.ps1
